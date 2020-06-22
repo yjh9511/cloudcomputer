@@ -18,34 +18,54 @@ import requests
 from bs4 import BeautifulSoup 
 from PySide2.QtWidgets import QMessageBox
 import redis
+import json
+import sys
+
+
+r = redis.StrictRedis(host='127.0.0.1', port=6379, db=0)
+
+student_info = {
+    "name": "양종호",
+    "num":"2014920025",
+    "grade":"4",
+    "semester":"2",
+    "college":"공과대학",
+    "major":"컴퓨터과학부"
+
+}
+student_basket=[["71065","01","클라우드컴퓨팅","현철승","월06,07,08/19-112/113","48","3"],
+                ["71077","01","컴퓨터과학종합설계","유하진","목01,02,03,04/19-112/113","65","3"],
+                ["71021","01","컴퓨터통신","안상현","목07,08,09/19-110/111","75","3"]]
+    
+index=["과목번호","분반","과목명","교수명","요일","수강정원","학점"]
+"""
+# set
+json_test_dict = json.dumps(student_info, ensure_ascii=False).encode('utf-8')
+r.set("student_info", json_test_dict)
+# get
+json_test_dict = r.get('student_info').decode('utf-8')
+test_dict2 = dict(json.loads(json_test_dict))
+"""
+
+for key,value in student_info.items():
+    r.hmset("student_info",{key:value})
+
+basket_index=0
+basket_id="장바구니"+str(basket_index)
+for i in student_basket:
+    for id in range(len(index)):
+        r.hmset(basket_id,{index[id]:i[id]})
+    basket_index=basket_index+1
+    basket_id="장바구니"+str(basket_index)
+
+
+
+print(r.hget('student_info','name').decode('utf-8'))
 
 
 
 
-try:
-
-    conn = redis.StrictRedis(
-
-        host='127.0.0.1',
-
-        port=6379,
-
-        db=2)
-
-    print ('Set Record:', conn.set("test", "Nice to meet you"))
-
-    print ('Get Record:', conn.get("test"))
-    print(conn.get('a'))
-    print ('Delete Record:', conn.delete("test"))
-
-    print ('Get Deleted Record:', conn.get("test"))
-
-except Exception as ex:
-
-    print ('Error:', ex)
-
-
-class Ui_MainWindow(object):
+class Ui_MainWindow(QtCore.QObject):
     def setupUi(self, MainWindow):
         MainWindow.setObjectName("MainWindow")
         MainWindow.resize(1039, 688)
@@ -154,18 +174,36 @@ class Ui_MainWindow(object):
         self.label_15.setFrameShape(QtWidgets.QFrame.Box)
         self.label_15.setAlignment(QtCore.Qt.AlignCenter)
         self.label_15.setObjectName("label_15")
+
+        apply_list=[]
+        self.max_credit=0
+        apply_len=r.scard('2014920025_apply')
+        for i in r.smembers('2014920025_apply'):
+            apply_id="2014920025_"+i.decode('utf-8')
+            self.max_credit=self.max_credit+int(r.hget(apply_id,"학점").decode('utf-8'))
+            
+
+        self.label17=14-self.max_credit
+        if self.label17<0:
+                self.label17=0
         self.label_16 = QtWidgets.QLabel(self.centralwidget)
+        self.label_16.setText(str(self.max_credit))
         self.label_16.setGeometry(QtCore.QRect(617, 77, 61, 21))
         self.label_16.setStyleSheet("")
         self.label_16.setFrameShape(QtWidgets.QFrame.Box)
         self.label_16.setAlignment(QtCore.Qt.AlignCenter)
         self.label_16.setObjectName("label_16")
         self.label_17 = QtWidgets.QLabel(self.centralwidget)
+        self.label_17.setText(str(self.label17))
         self.label_17.setGeometry(QtCore.QRect(617, 58, 61, 20))
         self.label_17.setStyleSheet("")
         self.label_17.setFrameShape(QtWidgets.QFrame.Box)
         self.label_17.setAlignment(QtCore.Qt.AlignCenter)
         self.label_17.setObjectName("label_17")
+
+
+
+
         self.label_18 = QtWidgets.QLabel(self.centralwidget)
         self.label_18.setGeometry(QtCore.QRect(617, 38, 61, 21))
         self.label_18.setStyleSheet("")
@@ -189,7 +227,7 @@ class Ui_MainWindow(object):
         self.tableWidget4.setFrameShadow(QtWidgets.QFrame.Sunken)
         self.tableWidget4.setShowGrid(True)
         self.tableWidget4.setGridStyle(QtCore.Qt.SolidLine)
-        self.tableWidget4.setObjectName("tableWidget2")
+        self.tableWidget4.setObjectName("tableWidget4")
         self.tableWidget4.setColumnCount(8)
 
         item = QtWidgets.QTableWidgetItem("과목번호")
@@ -225,8 +263,45 @@ class Ui_MainWindow(object):
         self.tableWidget4.setHorizontalHeaderItem(7, item)
         self.tableWidget4.setColumnWidth(7,51)
 
+        basket_list=[]
+        tmp=[]
+        for i in range(len(student_basket)):
+            basket_id="장바구니"+str(i)
+            for j in r.hvals(basket_id):
+                tmp.append(j.decode('utf-8'))
+            basket_list.append(tmp)
+            tmp=[]
+
+        self.tableWidget4.setRowCount(len(student_basket))
+        item_widget=[]
+        for i in range(len(student_basket)):
+            item_widget.append(0)
+            for j in range(6):
+                item=QtWidgets.QTableWidgetItem(basket_list[i][j])
+                self.tableWidget4.setItem(i,j,item)
+            
+            item=QtWidgets.QTableWidgetItem()
+            self.tableWidget4.setItem(i,6,item)
+
+            item_widget[i] = QtWidgets.QPushButton("신청")
+            
+            self.tableWidget4.setCellWidget(i, 7, item_widget[i])
+            item_widget[i].clicked.connect(self.submitmethod(basket_list[i]))
+
+         #헤더 사이즈 조절
+        header = self.tableWidget4.horizontalHeader()
+        header.setSectionResizeMode(0, QtWidgets.QHeaderView.ResizeToContents)
+        header.setSectionResizeMode(1, QtWidgets.QHeaderView.ResizeToContents)
+        header.setSectionResizeMode(2, QtWidgets.QHeaderView.ResizeToContents)
+        header.setSectionResizeMode(4, QtWidgets.QHeaderView.ResizeToContents)
+        header.setSectionResizeMode(5, QtWidgets.QHeaderView.Stretch)
+        header.setSectionResizeMode(6, QtWidgets.QHeaderView.Stretch)
+        header.setSectionResizeMode(7, QtWidgets.QHeaderView.Stretch)
+        
 
         #tab_2의 테이블화면
+        
+        
         self.tabWidget.addTab(self.tab, "")
         self.tab_2 = QtWidgets.QWidget()
         self.tab_2.setObjectName("tab_2")
@@ -363,7 +438,7 @@ class Ui_MainWindow(object):
         self.tableWidget3.setFrameShadow(QtWidgets.QFrame.Sunken)
         self.tableWidget3.setShowGrid(True)
         self.tableWidget3.setGridStyle(QtCore.Qt.SolidLine)
-        self.tableWidget3.setObjectName("tableWidget2")
+        self.tableWidget3.setObjectName("tableWidget3")
         self.tableWidget3.setColumnCount(8)
 
         item = QtWidgets.QTableWidgetItem("과목번호")
@@ -399,6 +474,42 @@ class Ui_MainWindow(object):
         self.tableWidget3.setHorizontalHeaderItem(7, item)
         self.tableWidget3.setColumnWidth(7,51)
 
+        apply_list=[]
+        tmp=[]
+        apply_len=r.scard('2014920025_apply')
+        for i in r.smembers('2014920025_apply'):
+            apply_id="2014920025_"+i.decode('utf-8')
+            for j in r.hvals(apply_id):
+                tmp.append(j.decode('utf-8'))
+            apply_list.append(tmp)
+            tmp=[]
+      
+        self.tableWidget3.setRowCount(apply_len)
+        item_widget=[]
+        for i in range(apply_len):
+            item_widget.append(0)
+            for j in range(6):
+                item=QtWidgets.QTableWidgetItem(apply_list[i][j])
+                self.tableWidget3.setItem(i,j,item)
+            
+            item=QtWidgets.QTableWidgetItem()
+            self.tableWidget3.setItem(i,6,item)
+
+            item_widget[i] = QtWidgets.QPushButton("삭제")
+            
+            self.tableWidget3.setCellWidget(i, 7, item_widget[i])
+            item_widget[i].clicked.connect(self.deletemethod)
+
+         #헤더 사이즈 조절
+        header = self.tableWidget3.horizontalHeader()
+        header.setSectionResizeMode(0, QtWidgets.QHeaderView.ResizeToContents)
+        header.setSectionResizeMode(1, QtWidgets.QHeaderView.ResizeToContents)
+        header.setSectionResizeMode(2, QtWidgets.QHeaderView.ResizeToContents)
+        header.setSectionResizeMode(4, QtWidgets.QHeaderView.ResizeToContents)
+        header.setSectionResizeMode(6, QtWidgets.QHeaderView.Stretch)
+        header.setSectionResizeMode(7, QtWidgets.QHeaderView.Stretch)
+
+
         self.line_2 = QtWidgets.QFrame(self.centralwidget)
         self.line_2.setGeometry(QtCore.QRect(30, 111, 6, 29))
         self.line_2.setStyleSheet("background-color: rgb(144, 187, 200);")
@@ -420,6 +531,25 @@ class Ui_MainWindow(object):
         self.tableWidget.setObjectName("tableWidget")
         self.tableWidget.setColumnCount(5)
         self.tableWidget.setRowCount(10)
+
+    
+        day=['월','화','수','목','금']
+        apply_len=r.scard('2014920025_apply')
+        for i in r.smembers('2014920025_apply'):
+            apply_id="2014920025_"+i.decode('utf-8')
+            parsing=r.hget(apply_id,"요일").decode('utf-8')
+            if parsing==' ':
+                continue
+            parsing=parsing.split('/')[0]
+            table_column=day.index(parsing[0])
+            table_row=parsing[1:].split(',')
+            print(int(table_row[0])-1,table_column)
+            for i in table_row:
+                self.tableWidget.setItem(int(i)-1, table_column, QtWidgets.QTableWidgetItem())
+                self.tableWidget.item(int(i)-1,table_column).setBackground(QtGui.QColor(225, 225, 225))
+            
+
+
         item = QtWidgets.QTableWidgetItem()
         item.setBackground(QtGui.QColor(225, 225, 225))
         self.tableWidget.setVerticalHeaderItem(0, item)
@@ -482,7 +612,98 @@ class Ui_MainWindow(object):
         self.retranslateUi(MainWindow)
         self.tabWidget.setCurrentIndex(1)
         QtCore.QMetaObject.connectSlotsByName(MainWindow)
+    #신청버튼이 눌렸을때
+    def submitmethod(self,submit):
+        def real():
+            if r.exists("2014920025_"+submit[2])==1:
+                msgBox = QMessageBox()
+                msgBox.setWindowTitle("alert")
+                msgBox.setText("중복신청입니다.")
+                msgBox.setStandardButtons(QMessageBox.Yes)
+                msgBox.exec_()
+                return 
 
+            day=['월','화','수','목','금']
+            
+            apply_id="2014920025_"+submit[2]
+            parsing=submit[4]
+            print(parsing)
+            if parsing!=' ':
+                parsing=parsing.split('/')[0]
+                table_column=day.index(parsing[0])
+                table_row=parsing[1:].split(',')
+                print(int(table_row[0])-1,table_column)
+                for i in table_row:
+                    if self.tableWidget.item(int(i)-1,table_column)==None:
+                        continue
+                    else:
+                        msgBox = QMessageBox()
+                        msgBox.setWindowTitle("alert")
+                        msgBox.setText("시간표중복입니다.")
+                        msgBox.setStandardButtons(QMessageBox.Yes)
+                        msgBox.exec_()
+                        return 
+                for i in table_row:
+                    self.tableWidget.setItem(int(i)-1, table_column, QtWidgets.QTableWidgetItem())
+                    self.tableWidget.item(int(i)-1,table_column).setBackground(QtGui.QColor(225, 225, 225))
+
+
+            self.max_credit=self.max_credit+int(submit[6])
+            self.label_16.setText(str(self.max_credit))
+            self.label17=14-self.max_credit
+            if self.label17<0:
+                self.label17=0
+            self.label_17.setText(str(self.label17))
+
+            item_widget=[]
+            r.sadd("2014920025_apply",submit[2])
+            self.tableWidget3.setRowCount(self.tableWidget3.rowCount()+1)
+            for i in range(self.tableWidget3.rowCount()):
+                item_widget.append(0)
+            apply_id="2014920025_"+submit[2]
+            for i in range(7):
+                r.hmset(apply_id,{index[i]:submit[i]})
+                item=QtWidgets.QTableWidgetItem(submit[i])
+                self.tableWidget3.setItem(self.tableWidget3.rowCount()-1,i,item)
+            item=QtWidgets.QTableWidgetItem()
+            self.tableWidget3.setItem(self.tableWidget3.rowCount()-1,6,item)
+            item_widget[self.tableWidget3.rowCount()-1] = QtWidgets.QPushButton("삭제")
+            self.tableWidget3.setCellWidget(self.tableWidget3.rowCount()-1, 7, item_widget[self.tableWidget3.rowCount()-1])
+            item_widget[self.tableWidget3.rowCount()-1].clicked.connect(self.deletemethod)
+        return real
+        #print(submitlist)
+    #삭제버튼을 눌렀을때
+    @QtCore.pyqtSlot()
+    def deletemethod(self):
+        btn=self.sender()
+        row = self.tableWidget3.indexAt(btn.pos()).row()
+        r.srem('2014920025_apply',self.tableWidget3.item(row,2).text())
+        self.max_credit=self.max_credit-int(r.hget("2014920025_"+self.tableWidget3.item(row,2).text(),"학점"))
+        self.label_16.setText(str(self.max_credit))
+        self.label17=14-self.max_credit
+        if self.label17<0:
+                self.label17=0
+        self.label_17.setText(str(self.label17))
+
+        day=['월','화','수','목','금']
+        parsing=r.hget("2014920025_"+self.tableWidget3.item(row,2).text(),"요일").decode('utf-8')
+        print(parsing)
+        if parsing!=' ':
+           parsing=parsing.split('/')[0]
+           table_column=day.index(parsing[0])
+           table_row=parsing[1:].split(',')
+           print(int(table_row[0])-1,table_column)
+           for i in table_row:
+               self.tableWidget.takeItem(int(i)-1, table_column)
+              
+        
+
+        print(self.tableWidget3.item(row,2).text())
+        apply_id="2014920025_"+self.tableWidget3.item(row,2).text()
+        r.delete(apply_id)
+        #r.lindex("student_apply",self.tableWidget3.item(row,2).text())
+        self.tableWidget3.removeRow(row)
+            
     #과목검색 버튼이 눌렸을때
     def clickMethod(self):
         params=''
@@ -520,6 +741,8 @@ class Ui_MainWindow(object):
         subpro_list=[] #교수명
         classnm_list=[] #강의실
         limit_list=[] #수강정원
+        credit_list=[]
+        shyr_list=[]
 
         datas=soup.find_all('subject_nm')
         for data in datas:
@@ -539,22 +762,50 @@ class Ui_MainWindow(object):
         datas=soup.find_all('tlsn_limit_count')
         for data in datas:
             limit_list.append(data.text)
+        datas=soup.find_all('credit')
+        for data in datas:
+            credit_list.append(data.text)
+        datas=soup.find_all('shyr')
+        for data in datas:
+            shyr_list.append(data.text)
 
-        alllist=[subnum_list]+[subcl_list]+[subname_list]+[subpro_list]+[classnm_list]+[limit_list]
+        print(type(self.spinBox.value()))
+        i=0
+        while(True):
+            if i==len(shyr_list):
+                break
+            if shyr_list[i]!=str(self.spinBox.value()):
+                del subnum_list[i]
+                del subcl_list[i]
+                del subname_list[i]
+                del subpro_list[i]
+                del classnm_list[i]
+                del limit_list[i]
+                del credit_list[i]
+                del shyr_list[i]
+                continue
+            i=i+1
+
+        alllist=[subnum_list]+[subcl_list]+[subname_list]+[subpro_list]+[classnm_list]+[limit_list]+[credit_list]+[shyr_list]
         
         num=len(subnum_list)
         self.tableWidget2.setRowCount(num)
+        search_index=[]
         for i in range(num):
+            search_index.append(0)
+            tmp_list=[]
             for j in range(6):
                 item=QtWidgets.QTableWidgetItem(alllist[j][i])
+                tmp_list.append(alllist[j][i])
+                
                 self.tableWidget2.setItem(i,j,item)
-            
+            tmp_list.append(alllist[6][i])
             item=QtWidgets.QTableWidgetItem()
             self.tableWidget2.setItem(i,6,item)
 
-            item_widget = QtWidgets.QPushButton("신청")
-            self.tableWidget2.setCellWidget(i, 7, item_widget)
-
+            search_index[i] = QtWidgets.QPushButton("신청")
+            self.tableWidget2.setCellWidget(i, 7, search_index[i])
+            search_index[i].clicked.connect(self.submitmethod(tmp_list))
 
         #헤더 사이즈 조절
         header = self.tableWidget2.horizontalHeader()
@@ -578,23 +829,26 @@ class Ui_MainWindow(object):
         _translate = QtCore.QCoreApplication.translate
         MainWindow.setWindowTitle(_translate("MainWindow", "MainWindow"))
         self.label.setText(_translate("MainWindow", "2020년 2학기"))
-        self.label_2.setText(_translate("MainWindow", "4학년-2"))
+        self.label_2.setText(_translate("MainWindow", r.hget('student_info','grade').decode('utf-8')+"학년-"+r.hget('student_info','semester').decode('utf-8')))
         self.label_3.setText(_translate("MainWindow", "이름"))
         self.label_4.setText(_translate("MainWindow", "학번"))
-        self.label_5.setText(_translate("MainWindow", "학번"))
-        self.label_6.setText(_translate("MainWindow", "이름"))
+        self.label_5.setText(_translate("MainWindow", r.hget('student_info','num').decode('utf-8')))
+        self.label_6.setText(_translate("MainWindow", r.hget('student_info','name').decode('utf-8')))
         self.label_7.setText(_translate("MainWindow", "단과대"))
         self.label_8.setText(_translate("MainWindow", "학과"))
-        self.label_9.setText(_translate("MainWindow", "컴퓨터"))
-        self.label_10.setText(_translate("MainWindow", "공과대"))
+        self.label_9.setText(_translate("MainWindow", r.hget('student_info','major').decode('utf-8')))
+        self.label_10.setText(_translate("MainWindow", r.hget('student_info','college').decode('utf-8')))
         self.label_11.setText(_translate("MainWindow", "최대학점"))
         self.label_12.setText(_translate("MainWindow", "최소학점"))
-        self.label_13.setText(_translate("MainWindow", "남은학점"))
-        self.label_14.setText(_translate("MainWindow", "필요학점"))
+        self.label_13.setText(_translate("MainWindow", "필요학점"))
+        self.label_14.setText(_translate("MainWindow", "현재학점"))
         self.label_15.setText(_translate("MainWindow", "23"))
-        self.label_16.setText(_translate("MainWindow", "8"))
+        """
+        self.label_16.setText(_translate("MainWindow", "8"))      
         self.label_17.setText(_translate("MainWindow", "6"))
+        """
         self.label_18.setText(_translate("MainWindow", "14"))
+        
         
         self.tabWidget.setTabText(self.tabWidget.indexOf(self.tab), _translate("MainWindow", "장바구니"))
 
@@ -637,7 +891,7 @@ class Ui_MainWindow(object):
         item = self.tableWidget.verticalHeaderItem(9)
         item.setText(_translate("MainWindow", "6"))
         item = self.tableWidget.horizontalHeaderItem(0)
-        item.setText(_translate("MainWindow", "양"))
+        item.setText(_translate("MainWindow", "월"))
         item = self.tableWidget.horizontalHeaderItem(1)
         item.setText(_translate("MainWindow", "화"))
         item = self.tableWidget.horizontalHeaderItem(2)
@@ -687,7 +941,7 @@ if __name__ == "__main__":
     soup2=BeautifulSoup(req.content,'html.parser')
     print(soup2)
     """
-
+   
     app = QtWidgets.QApplication(sys.argv)
     app.setStyle(QtWidgets.QStyleFactory.create('Fusion'))
     MainWindow = QtWidgets.QMainWindow()
